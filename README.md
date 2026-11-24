@@ -2,6 +2,12 @@
 
 Native QML clipboard history drawer for **Caelestia Shell** (Quickshell + Hyprland), powered by `cliphist`.
 
+## Preview
+<img width="1247" height="780" alt="caelestia-clipboard-01" src="https://github.com/user-attachments/assets/728d18b1-345e-4480-bbec-7ee9bc3428a0" /> <img width="1247" height="782" alt="caelestia-clipboard-02" src="https://github.com/user-attachments/assets/6878560d-b449-4b2a-9148-c6770d835b9a" />
+
+
+
+
 ## Features
 
 - **100% Native Look & Feel:** Uses Caelestia `BlobGroup` concave borders, elastic deformation, `SearchBar`, ripple effects, and real-time Material You dynamic palette.
