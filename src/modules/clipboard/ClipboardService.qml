@@ -71,7 +71,7 @@ Scope {
         if (root.autoPaste) {
             Quickshell.execDetached([
                 "sh", "-c",
-                'cliphist decode "$1" | wl-copy && sleep 0.12 && if command -v wtype >/dev/null 2>&1; then wtype -M ctrl -k v -m ctrl; else hyprctl dispatch sendshortcut "CTRL, V," >/dev/null 2>&1; fi',
+                "cliphist decode \"$1\" | wl-copy && sleep 0.07 && cls=$(hyprctl activewindow -j 2>/dev/null | grep -i '\"class\":' | tr '[:upper:]' '[:lower:]'); case \"$cls\" in *kitty*|*ghostty*|*alacritty*|*foot*|*wezterm*|*konsole*) hyprctl dispatch 'hl.dsp.send_shortcut({ mods = \"CTRL SHIFT\", key = \"v\" })' >/dev/null ;; *) hyprctl dispatch 'hl.dsp.send_shortcut({ mods = \"CTRL\", key = \"v\" })' >/dev/null ;; esac",
                 "sh", item.id
             ]);
         } else {

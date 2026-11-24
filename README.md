@@ -17,7 +17,6 @@ Native QML clipboard history drawer for **Caelestia Shell** (Quickshell + Hyprla
 - `cliphist` (with `wl-paste --watch cliphist store` running in your Hyprland autostart)
 - `wl-clipboard` (`wl-copy`)
 - `python3`
-- `wtype` *(optional — falls back to `hyprctl dispatch sendshortcut` on Hyprland when auto-paste is enabled)*
 
 ## Installation
 
