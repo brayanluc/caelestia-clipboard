@@ -24,7 +24,17 @@ Native QML clipboard history drawer for **Caelestia Shell** (Quickshell + Hyprla
 - `wl-clipboard` (`wl-copy`)
 - `python3`
 
-## Installation
+## AUR Package (Arch / CachyOS)
+
+Once published to the AUR, install with your AUR helper:
+
+```bash
+paru -S caelestia-clipboard-git
+```
+
+The package installs a `systemd --user` service and a `pacman` hook that automatically keep the QML overlay refreshed across `caelestia-shell` updates, start `wl-paste --watch cliphist store` if needed, and bind `SUPER + V` when free (or notify you if `SUPER + V` is already taken).
+
+## Manual Installation
 
 ```bash
 git clone [https://github.com/brayanluc/caelestia-clipboard.git](https://github.com/brayanluc/caelestia-clipboard.git)

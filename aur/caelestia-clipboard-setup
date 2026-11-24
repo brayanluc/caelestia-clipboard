@@ -1,0 +1,218 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SHARE_DIR="/usr/share/caelestia-clipboard"
+SYS_DIR="/etc/xdg/quickshell/caelestia"
+CFG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/quickshell/caelestia"
+HYPR_USER="${XDG_CONFIG_HOME:-$HOME/.config}/caelestia/hypr-user.lua"
+STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/caelestia-clipboard"
+MODE="${1:-auto}"
+
+[ -d "$SYS_DIR" ] || exit 0
+[ -d "$SHARE_DIR/modules/clipboard" ] || exit 0
+
+mkdir -p "$CFG_DIR/components" "$CFG_DIR/modules/drawers" "$STATE_DIR"
+
+for item in "$SYS_DIR"/*; do
+    base="$(basename "$item")"
+    case "$base" in
+        components|modules) continue ;;
+        *) [ -e "$CFG_DIR/$base" ] || ln -s "$item" "$CFG_DIR/$base" ;;
+    esac
+done
+
+for item in "$SYS_DIR/components"/*; do
+    base="$(basename "$item")"
+    [ "$base" = "ScreenState.qml" ] && continue
+    [ -e "$CFG_DIR/components/$base" ] || ln -s "$item" "$CFG_DIR/components/$base"
+done
+
+for item in "$SYS_DIR/modules"/*; do
+    base="$(basename "$item")"
+    case "$base" in
+        drawers|clipboard) continue ;;
+        *) [ -e "$CFG_DIR/modules/$base" ] || ln -s "$item" "$CFG_DIR/modules/$base" ;;
+    esac
+done
+
+rm -rf "$CFG_DIR/modules/clipboard"
+cp -r "$SHARE_DIR/modules/clipboard" "$CFG_DIR/modules/clipboard"
+
+for item in "$SYS_DIR/modules/drawers"/*; do
+    base="$(basename "$item")"
+    case "$base" in
+        ContentWindow.qml|Panels.qml|Regions.qml) continue ;;
+        *) [ -e "$CFG_DIR/modules/drawers/$base" ] || ln -s "$item" "$CFG_DIR/modules/drawers/$base" ;;
+    esac
+done
+
+python3 - "$SYS_DIR" "$CFG_DIR" << "PYEOF"
+import sys
+from pathlib import Path
+
+sys_dir = Path(sys.argv[1])
+cfg_dir = Path(sys.argv[2])
+
+def patch_file(rel_path, replacements):
+    text = (sys_dir / rel_path).read_text()
+    for old, new in replacements:
+        assert old in text, f"Patch anchor not found in {rel_path}: {old!r}"
+        text = text.replace(old, new, 1)
+    (cfg_dir / rel_path).write_text(text)
+
+patch_file("components/ScreenState.qml", [
+    ("    property bool sidebar
+", "    property bool sidebar
+    property bool clipboard
+"),
+])
+
+patch_file("modules/drawers/Panels.qml", [
+    ("import qs.modules.launcher as Launcher
+", "import qs.modules.clipboard as Clipboard
+import qs.modules.launcher as Launcher
+"),
+    ("    readonly property alias launcher: launcher
+", "    readonly property alias clipboard: clipboard
+    readonly property alias launcher: launcher
+"),
+    ("    Launcher.Wrapper {
+        id: launcher
+", "    Clipboard.Wrapper {
+        id: clipboard
+
+        screen: root.screen
+        screenState: root.screenState
+        panels: root
+
+        anchors.horizontalCenter: parent.horizontalCenter
+        anchors.bottom: parent.bottom
+    }
+
+    Launcher.Wrapper {
+        id: launcher
+"),
+])
+
+patch_file("modules/drawers/ContentWindow.qml", [
+    ("        screenState.launcher = false;
+", "        screenState.clipboard = false;
+        screenState.launcher = false;
+"),
+    ("WlrLayershell.keyboardFocus: screenState.launcher || screenState.session ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None", "WlrLayershell.keyboardFocus: screenState.launcher || screenState.session || screenState.clipboard ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None"),
+    ("if ((s.launcher && conf.launcher.enabled) || (s.session && conf.session.enabled) || (s.sidebar && conf.sidebar.enabled))", "if ((s.launcher && conf.launcher.enabled) || s.clipboard || (s.session && conf.session.enabled) || (s.sidebar && conf.sidebar.enabled))"),
+    ("            root.screenState.launcher = false;
+", "            root.screenState.clipboard = false;
+            root.screenState.launcher = false;
+"),
+    ("        PanelBg {
+            id: launcherBg
+
+            panel: panels.launcher
+            deformAmount: 0.1
+        }
+", "        PanelBg {
+            id: clipboardBg
+
+            panel: panels.clipboard
+            deformAmount: 0.1
+        }
+
+        PanelBg {
+            id: launcherBg
+
+            panel: panels.launcher
+            deformAmount: 0.1
+        }
+"),
+    ("            launcher.transform: Matrix4x4 {
+                matrix: launcherBg.deformMatrix
+            }
+", "            clipboard.transform: Matrix4x4 {
+                matrix: clipboardBg.deformMatrix
+            }
+            launcher.transform: Matrix4x4 {
+                matrix: launcherBg.deformMatrix
+            }
+"),
+])
+
+patch_file("modules/drawers/Regions.qml", [
+    ("    R {
+        panel: root.panels.launcher
+        y: root.win.height - height
+        height: panel.height * (1 - root.panels.launcher.offsetScale) + root.borderThickness
+    }
+", "    R {
+        panel: root.panels.clipboard
+        y: root.win.height - height
+        height: panel.height * (1 - root.panels.clipboard.offsetScale) + root.borderThickness
+    }
+
+    R {
+        panel: root.panels.launcher
+        y: root.win.height - height
+        height: panel.height * (1 - root.panels.launcher.offsetScale) + root.borderThickness
+    }
+"),
+])
+PYEOF
+
+if ! pgrep -u "$USER" -f "cliphist store" >/dev/null 2>&1; then
+    nohup wl-paste --type text --watch cliphist store >/dev/null 2>&1 &
+    nohup wl-paste --type image --watch cliphist store >/dev/null 2>&1 &
+fi
+
+if [ -f "$HYPR_USER" ] && command -v hyprctl >/dev/null 2>&1; then
+    python3 - "$HYPR_USER" "$MODE" "$STATE_DIR" << "PYEOF"
+import json, subprocess, sys
+from pathlib import Path
+
+hypr_user = Path(sys.argv[1])
+mode = sys.argv[2]
+state_dir = Path(sys.argv[3])
+marker_start = "-- >>> caelestia-clipboard >>>"
+marker_end = "-- <<< caelestia-clipboard <<<"
+
+content = hypr_user.read_text()
+if marker_start in content or "drawers toggle clipboard" in content:
+    sys.exit(0)
+
+try:
+    binds = json.loads(subprocess.check_output(["hyprctl", "binds", "-j"], stderr=subprocess.DEVNULL))
+except Exception:
+    binds = []
+
+super_v_in_use = any(
+    b.get("modmask") == 64 and b.get("key", "").lower() == "v" and b.get("submap", "") == ""
+    for b in binds
+)
+
+if not super_v_in_use or mode == "--replace-bind":
+    lines = [marker_start]
+    if super_v_in_use:
+        lines.append("pcall(hl.unbind, "SUPER + V")")
+    lines.append("hl.bind("SUPER + V", hl.dsp.exec_cmd("caelestia shell drawers toggle clipboard"))")
+    lines.append(marker_end)
+    sep = "" if content.endswith("
+
+") else ("
+" if content.endswith("
+") else "
+
+")
+    hypr_user.write_text(content + sep + "
+".join(lines) + "
+")
+    subprocess.run(["hyprctl", "reload"], stderr=subprocess.DEVNULL)
+else:
+    stamp = state_dir / "bind-notified"
+    if not stamp.exists():
+        stamp.touch()
+        subprocess.run([
+            "notify-send",
+            "caelestia-clipboard installed",
+            "SUPER + V is already bound. Bind 'caelestia shell drawers toggle clipboard' or run: caelestia-clipboard-setup --replace-bind"
+        ], stderr=subprocess.DEVNULL)
+PYEOF
+fi

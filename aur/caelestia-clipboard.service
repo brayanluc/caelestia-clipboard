@@ -1,0 +1,11 @@
+[Unit]
+Description=Configure caelestia-clipboard overlay and daemon
+PartOf=graphical-session.target
+After=graphical-session.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/caelestia-clipboard-setup
+
+[Install]
+WantedBy=graphical-session.target

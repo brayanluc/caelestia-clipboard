@@ -1,0 +1,10 @@
+[Trigger]
+Operation = Install
+Operation = Upgrade
+Type = Package
+Target = caelestia-shell
+
+[Action]
+Description = Refreshing caelestia-clipboard QML overlay...
+When = PostTransaction
+Exec = /usr/bin/bash -c 'for d in /home/*; do u=$(basename "$d"); [ -d "$d/.config/quickshell/caelestia/modules/clipboard" ] && su - "$u" -c "/usr/bin/caelestia-clipboard-setup" >/dev/null 2>&1 || true; done'
