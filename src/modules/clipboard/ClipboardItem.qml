@@ -19,6 +19,10 @@ Item {
     anchors.left: parent?.left
     anchors.right: parent?.right
 
+    HoverHandler {
+        id: rowHover
+    }
+
     StateLayer {
         id: stateLayer
 
@@ -116,7 +120,7 @@ Item {
             icon: "delete"
             type: IconButton.Text
             radius: Tokens.rounding.full
-            opacity: root.isCurrent || stateLayer.containsMouse ? 0.85 : 0
+            opacity: root.isCurrent || rowHover.hovered ? 0.85 : 0
             visible: opacity > 0
             onClicked: root.service.deleteItem(root.modelData)
 
