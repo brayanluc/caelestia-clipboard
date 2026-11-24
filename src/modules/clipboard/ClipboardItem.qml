@@ -101,7 +101,7 @@ Item {
 
                 anchors.top: titleText.bottom
                 width: parent.width
-                text: root.modelData.isImage ? `${root.modelData.ext.toUpperCase()} • ${root.modelData.size}` : `#${root.modelData.id} • ${root.modelData.displayText.length} caracteres`
+                text: root.modelData.isImage ? `#${root.modelData.id} • ${root.modelData.ext.toUpperCase()} • ${root.modelData.size}` : `#${root.modelData.id} • ${root.modelData.displayText.length} chars`
                 font: Tokens.font.body.small
                 color: Colours.palette.m3outline
                 elide: Text.ElideRight

@@ -1,10 +1,10 @@
 pragma ComponentBehavior: Bound
 
 import QtQuick
+import QtQuick.Layouts
 import Quickshell
 import Caelestia
 import Caelestia.Config
-import Caelestia.I18n
 import qs.components
 import qs.components.containers
 import qs.components.controls
@@ -22,11 +22,33 @@ Item {
     readonly property var currentEntry: list.currentItem?.modelData ?? null
     readonly property bool showPreview: currentEntry?.isImage === true
 
+    property bool limitExpanded: false
+    property int draftLimit: 100
+
+    readonly property bool isUnlimited: service.maxHistory === 0
+    readonly property int activeSliderValue: sliderDrag.pressed ? draftLimit : (isUnlimited ? service.lastFiniteLimit : service.maxHistory)
+    readonly property real sliderRatio: Math.max(0, Math.min(1, (activeSliderValue - 25) / 225))
+
     implicitWidth: panelWidth + padding * 2
-    implicitHeight: previewCard.implicitHeight + (showPreview ? padding : 0) + listArea.implicitHeight + searchRow.height + padding * 3
+    implicitHeight: previewCard.implicitHeight + (showPreview ? padding : 0) + listArea.implicitHeight + (limitBar.implicitHeight > 0 ? limitBar.implicitHeight + Tokens.spacing.small : 0) + searchRow.height + padding * 3
+
+    Keys.onEscapePressed: {
+        if (root.limitExpanded)
+            root.limitExpanded = false;
+        else
+            root.screenState.clipboard = false;
+    }
 
     ClipboardService {
         id: service
+        onMaxHistoryChanged: {
+            if (maxHistory > 0)
+                root.draftLimit = maxHistory;
+        }
+        onLastFiniteLimitChanged: {
+            if (!sliderDrag.pressed)
+                root.draftLimit = lastFiniteLimit;
+        }
     }
 
     StyledClippingRect {
@@ -64,7 +86,7 @@ Item {
             anchors.margins: Tokens.padding.medium
             implicitWidth: badgeText.implicitWidth + Tokens.padding.medium * 2
             implicitHeight: badgeText.implicitHeight + Tokens.padding.small * 2
-            radius: Tokens.rounding.full
+            radius: height / 2
             color: Colours.tPalette.m3surfaceContainerHighest
             visible: root.showPreview
 
@@ -82,13 +104,17 @@ Item {
 
         anchors.left: parent.left
         anchors.right: parent.right
-        anchors.bottom: searchRow.top
+        anchors.bottom: limitBar.top
         anchors.leftMargin: root.padding
         anchors.rightMargin: root.padding
-        anchors.bottomMargin: root.padding
+        anchors.bottomMargin: limitBar.implicitHeight > 0 ? Tokens.spacing.small : root.padding
 
         readonly property int maxVisible: Math.min(7, Math.max(1, list.count))
         implicitHeight: list.count > 0 ? (Tokens.sizes.launcher.itemHeight + list.spacing) * maxVisible - list.spacing : 96
+
+        Behavior on anchors.bottomMargin {
+            Anim {}
+        }
 
         StyledListView {
             id: list
@@ -144,8 +170,247 @@ Item {
             }
 
             StyledText {
-                text: search.text ? Tr.tr("Nenhum item encontrado") : Tr.tr("Clipboard vazio")
+                text: search.text ? "No matching entries" : "Clipboard is empty"
                 color: Colours.palette.m3outline
+            }
+        }
+    }
+
+    StyledRect {
+        id: limitBar
+
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.bottom: searchRow.top
+        anchors.leftMargin: root.padding
+        anchors.rightMargin: root.padding
+        anchors.bottomMargin: implicitHeight > 0 ? Tokens.spacing.small : 0
+
+        implicitHeight: root.limitExpanded ? 46 : 0
+        radius: height / 2
+        color: Colours.tPalette.m3surfaceContainer
+        opacity: root.limitExpanded ? 1 : 0
+        visible: implicitHeight > 1
+        clip: true
+
+        Behavior on implicitHeight {
+            Anim {}
+        }
+
+        Behavior on anchors.bottomMargin {
+            Anim {}
+        }
+
+        Behavior on opacity {
+            Anim { type: Anim.DefaultEffects }
+        }
+
+        RowLayout {
+            anchors.fill: parent
+            anchors.leftMargin: Tokens.padding.large
+            anchors.rightMargin: Tokens.padding.medium
+            spacing: Tokens.spacing.medium
+
+            RowLayout {
+                id: limitLabelRow
+                Layout.preferredWidth: implicitWidth
+                Layout.alignment: Qt.AlignVCenter
+                spacing: Tokens.spacing.small
+
+                MaterialIcon {
+                    Layout.alignment: Qt.AlignVCenter
+                    text: "tune"
+                    color: Colours.palette.m3primary
+                    fontStyle: Tokens.font.icon.builders.medium.scale(0.95).build()
+                }
+
+                StyledText {
+                    Layout.alignment: Qt.AlignVCenter
+                    text: "History limit"
+                    font: Tokens.font.body.small
+                    color: Colours.palette.m3onSurfaceVariant
+                }
+            }
+
+            Item {
+                id: sliderTrackArea
+
+                Layout.fillWidth: true
+                Layout.preferredHeight: 32
+                Layout.alignment: Qt.AlignVCenter
+                opacity: root.isUnlimited && !sliderDrag.pressed ? 0.45 : 1.0
+
+                Behavior on opacity {
+                    Anim { type: Anim.DefaultEffects }
+                }
+
+                StyledRect {
+                    id: trackBg
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: parent.width
+                    height: 6
+                    radius: 3
+                    color: Colours.tPalette.m3surfaceContainerHighest
+                }
+
+                StyledRect {
+                    anchors.left: trackBg.left
+                    anchors.verticalCenter: trackBg.verticalCenter
+                    width: Math.max(6, trackBg.width * root.sliderRatio)
+                    height: 6
+                    radius: 3
+                    color: Colours.palette.m3primary
+
+                    Behavior on width {
+                        enabled: !sliderDrag.pressed
+                        Anim { type: Anim.DefaultEffects }
+                    }
+                }
+
+                StyledRect {
+                    id: sliderThumb
+                    anchors.verticalCenter: trackBg.verticalCenter
+                    x: Math.max(0, Math.min(trackBg.width - width, trackBg.width * root.sliderRatio - width / 2))
+                    width: sliderDrag.pressed ? 20 : (sliderDrag.containsMouse ? 17 : 14)
+                    height: width
+                    radius: width / 2
+                    color: Colours.palette.m3primary
+                    border.width: 2
+                    border.color: Colours.tPalette.m3surfaceContainer
+
+                    Behavior on x {
+                        enabled: !sliderDrag.pressed
+                        Anim { type: Anim.DefaultEffects }
+                    }
+
+                    Behavior on width {
+                        Anim { type: Anim.DefaultEffects }
+                    }
+                }
+
+                MouseArea {
+                    id: sliderDrag
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+
+                    function valueFromX(mx: real): int {
+                        const ratio = Math.max(0, Math.min(1, mx / Math.max(1, width)));
+                        const raw = 25 + ratio * 225;
+                        return Math.max(25, Math.min(250, Math.round(raw / 5) * 5));
+                    }
+
+                    onPressed: mouse => {
+                        root.draftLimit = valueFromX(mouse.x);
+                    }
+                    onPositionChanged: mouse => {
+                        if (pressed)
+                            root.draftLimit = valueFromX(mouse.x);
+                    }
+                    onReleased: {
+                        service.setMaxHistory(root.draftLimit);
+                        search.forceActiveFocus();
+                    }
+                    onWheel: wheel => {
+                        const delta = wheel.angleDelta.y > 0 ? 5 : -5;
+                        service.setMaxHistory(root.activeSliderValue + delta);
+                    }
+                }
+            }
+
+            StyledRect {
+                id: limitValueBadge
+
+                Layout.preferredWidth: 46
+                Layout.preferredHeight: 26
+                Layout.alignment: Qt.AlignVCenter
+                radius: height / 2
+                color: root.isUnlimited && !sliderDrag.pressed ? Colours.tPalette.m3secondaryContainer : Colours.tPalette.m3surfaceContainerHigh
+
+                Behavior on color {
+                    CAnim {}
+                }
+
+                StyledText {
+                    anchors.centerIn: parent
+                    text: root.isUnlimited && !sliderDrag.pressed ? "∞" : `${root.activeSliderValue}`
+                    font: Tokens.font.body.small
+                    color: root.isUnlimited && !sliderDrag.pressed ? Colours.palette.m3onSecondaryContainer : Colours.palette.m3onSurface
+                }
+            }
+
+            Item {
+                id: infCheckboxRow
+
+                Layout.preferredWidth: infContent.implicitWidth + Tokens.padding.medium * 2
+                Layout.preferredHeight: 32
+                Layout.alignment: Qt.AlignVCenter
+
+                StateLayer {
+                    id: infHover
+                    radius: parent.height / 2
+                    shapeMorph: true
+                    onClicked: {
+                        service.toggleUnlimited();
+                        search.forceActiveFocus();
+                    }
+                }
+
+                Row {
+                    id: infContent
+                    anchors.centerIn: parent
+                    spacing: Tokens.spacing.smaller
+
+                    StyledRect {
+                        id: infBox
+
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: 18
+                        height: 18
+                        radius: root.isUnlimited ? 6 : 5
+                        color: root.isUnlimited ? Colours.palette.m3primary : "transparent"
+                        border.width: 2
+                        border.color: root.isUnlimited ? Colours.palette.m3primary : Colours.palette.m3outline
+                        scale: infHover.pressed ? 0.88 : 1.0
+
+                        Behavior on color {
+                            CAnim {}
+                        }
+                        Behavior on border.color {
+                            CAnim {}
+                        }
+                        Behavior on scale {
+                            Anim { type: Anim.DefaultEffects }
+                        }
+
+                        MaterialIcon {
+                            anchors.centerIn: parent
+                            text: "check"
+                            color: Colours.palette.m3onPrimary
+                            fontStyle: Tokens.font.icon.builders.small.scale(0.85).build()
+                            scale: root.isUnlimited ? 1 : 0
+                            opacity: root.isUnlimited ? 1 : 0
+
+                            Behavior on scale {
+                                Anim { type: Anim.DefaultEffects }
+                            }
+                            Behavior on opacity {
+                                Anim { type: Anim.DefaultEffects }
+                            }
+                        }
+                    }
+
+                    StyledText {
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: "∞"
+                        font: Tokens.font.body.medium
+                        color: root.isUnlimited ? Colours.palette.m3primary : Colours.palette.m3onSurfaceVariant
+
+                        Behavior on color {
+                            CAnim {}
+                        }
+                    }
+                }
             }
         }
     }
@@ -164,13 +429,21 @@ Item {
             id: search
 
             anchors.left: parent.left
-            anchors.right: wipeBtn.left
-            anchors.rightMargin: Tokens.spacing.small
+            anchors.right: controlsRow.left
+            anchors.rightMargin: Tokens.spacing.medium
             anchors.verticalCenter: parent.verticalCenter
 
             topPadding: Math.round((Tokens.padding.medium + Tokens.padding.large) / 2)
             bottomPadding: Math.round((Tokens.padding.medium + Tokens.padding.large) / 2)
-            placeholderText: Tr.tr("Pesquisar no clipboard...")
+            placeholderText: {
+                if (autoPasteHover.containsMouse)
+                    return `Auto-paste on select: ${service.autoPaste ? "Enabled" : "Disabled"}`;
+                if (limitHover.containsMouse)
+                    return `History limit: ${service.maxHistory > 0 ? service.maxHistory + " entries" : "Unlimited"}`;
+                if (wipeHover.containsMouse)
+                    return "Clear entire clipboard history";
+                return "Search clipboard...";
+            }
 
             onAccepted: {
                 if (root.currentEntry) {
@@ -181,7 +454,12 @@ Item {
 
             Keys.onUpPressed: list.decrementCurrentIndex()
             Keys.onDownPressed: list.incrementCurrentIndex()
-            Keys.onEscapePressed: root.screenState.clipboard = false
+            Keys.onEscapePressed: {
+                if (root.limitExpanded)
+                    root.limitExpanded = false;
+                else
+                    root.screenState.clipboard = false;
+            }
 
             Keys.onPressed: event => {
                 if (event.key === Qt.Key_Delete || ((event.modifiers & Qt.ControlModifier) && event.key === Qt.Key_D)) {
@@ -209,16 +487,168 @@ Item {
             Component.onCompleted: forceActiveFocus()
         }
 
-        IconButton {
-            id: wipeBtn
+        Row {
+            id: controlsRow
 
             anchors.right: parent.right
             anchors.verticalCenter: parent.verticalCenter
-            icon: "delete_sweep"
-            type: IconButton.Text
-            radius: Tokens.rounding.full
-            enabled: service.entries.length > 0
-            onClicked: service.wipeAll()
+            spacing: Tokens.spacing.small
+
+            StyledRect {
+                id: autoPasteBtn
+
+                width: search.implicitHeight
+                height: search.implicitHeight
+                radius: autoPasteHover.pressed ? 10 : (service.autoPaste ? 14 : height / 2)
+                color: service.autoPaste ? Colours.tPalette.m3secondaryContainer : Colours.tPalette.m3surfaceContainer
+                scale: autoPasteHover.pressed ? 0.92 : (autoPasteHover.containsMouse ? 1.04 : 1.0)
+
+                Behavior on color {
+                    CAnim {}
+                }
+                Behavior on radius {
+                    Anim { type: Anim.DefaultEffects }
+                }
+                Behavior on scale {
+                    Anim { type: Anim.DefaultEffects }
+                }
+
+                StateLayer {
+                    id: autoPasteHover
+                    radius: parent.radius
+                    shapeMorph: true
+                    onClicked: {
+                        service.toggleAutoPaste();
+                        search.forceActiveFocus();
+                    }
+                }
+
+                MaterialIcon {
+                    anchors.centerIn: parent
+                    text: "content_paste_go"
+                    color: service.autoPaste ? Colours.palette.m3onSecondaryContainer : Colours.palette.m3onSurfaceVariant
+                    fontStyle: Tokens.font.icon.builders.medium.scale(1.0).build()
+                    scale: service.autoPaste ? 1.08 : 1.0
+
+                    Behavior on color {
+                        CAnim {}
+                    }
+                    Behavior on scale {
+                        Anim { type: Anim.DefaultEffects }
+                    }
+                }
+            }
+
+            StyledRect {
+                id: limitBtn
+
+                width: limitRow.implicitWidth + Tokens.padding.large * 2
+                height: search.implicitHeight
+                radius: limitHover.pressed ? 10 : (root.limitExpanded ? 14 : height / 2)
+                color: root.limitExpanded ? Colours.tPalette.m3secondaryContainer : Colours.tPalette.m3surfaceContainer
+                scale: limitHover.pressed ? 0.94 : (limitHover.containsMouse ? 1.03 : 1.0)
+
+                Behavior on width {
+                    Anim { type: Anim.DefaultEffects }
+                }
+                Behavior on color {
+                    CAnim {}
+                }
+                Behavior on radius {
+                    Anim { type: Anim.DefaultEffects }
+                }
+                Behavior on scale {
+                    Anim { type: Anim.DefaultEffects }
+                }
+
+                StateLayer {
+                    id: limitHover
+                    radius: parent.radius
+                    shapeMorph: true
+                    onClicked: {
+                        root.limitExpanded = !root.limitExpanded;
+                        search.forceActiveFocus();
+                    }
+                }
+
+                Row {
+                    id: limitRow
+                    anchors.centerIn: parent
+                    spacing: Tokens.spacing.smaller
+
+                    MaterialIcon {
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: "history"
+                        color: root.limitExpanded ? Colours.palette.m3onSecondaryContainer : Colours.palette.m3onSurfaceVariant
+                        fontStyle: Tokens.font.icon.builders.medium.scale(0.95).build()
+                        rotation: root.limitExpanded ? -35 : 0
+
+                        Behavior on color {
+                            CAnim {}
+                        }
+                        Behavior on rotation {
+                            Anim { type: Anim.DefaultEffects }
+                        }
+                    }
+
+                    StyledText {
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: root.isUnlimited ? "∞" : `${root.activeSliderValue}`
+                        font: Tokens.font.body.small
+                        color: root.limitExpanded ? Colours.palette.m3onSecondaryContainer : Colours.palette.m3onSurface
+
+                        Behavior on color {
+                            CAnim {}
+                        }
+                    }
+                }
+            }
+
+            StyledRect {
+                id: wipeBtn
+
+                width: search.implicitHeight
+                height: search.implicitHeight
+                radius: wipeHover.pressed ? 10 : height / 2
+                color: wipeHover.containsMouse && service.entries.length > 0 ? Colours.tPalette.m3errorContainer : Colours.tPalette.m3surfaceContainer
+                opacity: service.entries.length > 0 ? 1 : 0.45
+                scale: wipeHover.pressed ? 0.92 : (wipeHover.containsMouse && service.entries.length > 0 ? 1.04 : 1.0)
+
+                Behavior on color {
+                    CAnim {}
+                }
+                Behavior on radius {
+                    Anim { type: Anim.DefaultEffects }
+                }
+                Behavior on scale {
+                    Anim { type: Anim.DefaultEffects }
+                }
+                Behavior on opacity {
+                    Anim { type: Anim.DefaultEffects }
+                }
+
+                StateLayer {
+                    id: wipeHover
+                    disabled: service.entries.length === 0
+                    radius: parent.radius
+                    shapeMorph: true
+                    onClicked: {
+                        service.wipeAll();
+                        search.forceActiveFocus();
+                    }
+                }
+
+                MaterialIcon {
+                    anchors.centerIn: parent
+                    text: "delete_sweep"
+                    color: wipeHover.containsMouse && service.entries.length > 0 ? Colours.palette.m3onErrorContainer : Colours.palette.m3onSurfaceVariant
+                    fontStyle: Tokens.font.icon.builders.medium.scale(1.15).build()
+
+                    Behavior on color {
+                        CAnim {}
+                    }
+                }
+            }
         }
     }
 
@@ -229,6 +659,7 @@ Item {
                 search.forceActiveFocus();
             } else {
                 search.text = "";
+                root.limitExpanded = false;
             }
         }
 

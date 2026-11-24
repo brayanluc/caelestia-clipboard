@@ -26,6 +26,7 @@ Item {
     onShouldBeActiveChanged: {
         if (shouldBeActive) {
             screenState.launcher = false;
+            screenState.session = false;
             implicitHeight = Qt.binding(() => content.implicitHeight);
         } else {
             implicitHeight = implicitHeight;
@@ -40,6 +41,20 @@ Item {
 
     Behavior on offsetScale {
         Anim {}
+    }
+
+    Connections {
+        target: root.screenState
+
+        function onLauncherChanged(): void {
+            if (root.screenState.launcher)
+                root.screenState.clipboard = false;
+        }
+
+        function onSessionChanged(): void {
+            if (root.screenState.session)
+                root.screenState.clipboard = false;
+        }
     }
 
     Loader {

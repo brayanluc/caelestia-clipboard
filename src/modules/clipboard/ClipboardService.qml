@@ -9,7 +9,43 @@ Scope {
 
     property var entries: []
     property int thumbRevision: 0
+    property bool autoPaste: false
+    property int maxHistory: 100
+    property int lastFiniteLimit: 100
     readonly property string cacheDir: `${Quickshell.env("HOME")}/.cache/caelestia-clipboard`
+    readonly property string configPath: `${Quickshell.env("HOME")}/.config/caelestia/clipboard.json`
+
+    function saveSettings(): void {
+        const payload = JSON.stringify({
+            autoPaste: root.autoPaste,
+            maxHistory: root.maxHistory,
+            lastFiniteLimit: root.lastFiniteLimit
+        }, null, 2);
+        Quickshell.execDetached(["sh", "-c", 'mkdir -p "$(dirname "$1")" && printf "%s\n" "$2" > "$1"', "sh", root.configPath, payload]);
+    }
+
+    function toggleAutoPaste(): void {
+        root.autoPaste = !root.autoPaste;
+        root.saveSettings();
+    }
+
+    function setMaxHistory(limit: int): void {
+        const clamped = limit <= 0 ? 0 : Math.max(25, Math.min(250, Math.round(limit / 5) * 5));
+        if (clamped > 0)
+            root.lastFiniteLimit = clamped;
+        if (root.maxHistory === clamped)
+            return;
+        root.maxHistory = clamped;
+        root.saveSettings();
+        root.reload();
+    }
+
+    function toggleUnlimited(): void {
+        if (root.maxHistory === 0)
+            root.setMaxHistory(root.lastFiniteLimit >= 25 ? root.lastFiniteLimit : 100);
+        else
+            root.setMaxHistory(0);
+    }
 
     function reload(): void {
         listProc.running = false;
@@ -23,7 +59,7 @@ Scope {
         return entries.filter(e => {
             if (e.displayText.toLowerCase().includes(q))
                 return true;
-            if (e.isImage && (`imagem ${e.ext} ${e.dimensions} ${e.size}`).toLowerCase().includes(q))
+            if (e.isImage && (`image ${e.ext} ${e.dimensions} ${e.size}`).toLowerCase().includes(q))
                 return true;
             return false;
         });
@@ -32,7 +68,15 @@ Scope {
     function copyItem(item): void {
         if (!item)
             return;
-        Quickshell.execDetached(["sh", "-c", 'cliphist decode "$1" | wl-copy', "sh", item.id]);
+        if (root.autoPaste) {
+            Quickshell.execDetached([
+                "sh", "-c",
+                'cliphist decode "$1" | wl-copy && sleep 0.12 && if command -v wtype >/dev/null 2>&1; then wtype -M ctrl -k v -m ctrl; else hyprctl dispatch sendshortcut "CTRL, V," >/dev/null 2>&1; fi',
+                "sh", item.id
+            ]);
+        } else {
+            Quickshell.execDetached(["sh", "-c", 'cliphist decode "$1" | wl-copy', "sh", item.id]);
+        }
     }
 
     function deleteItem(item): void {
@@ -49,14 +93,39 @@ Scope {
     }
 
     Process {
+        id: loadProc
+
+        command: ["sh", "-c", 'cat "$HOME/.config/caelestia/clipboard.json" 2>/dev/null || true']
+        stdout: StdioCollector {
+            onStreamFinished: {
+                const raw = text.trim();
+                if (raw.length > 0) {
+                    try {
+                        const cfg = JSON.parse(raw);
+                        if (typeof cfg.autoPaste === "boolean")
+                            root.autoPaste = cfg.autoPaste;
+                        if (typeof cfg.lastFiniteLimit === "number" && cfg.lastFiniteLimit >= 25)
+                            root.lastFiniteLimit = Math.min(250, Math.floor(cfg.lastFiniteLimit));
+                        if (typeof cfg.maxHistory === "number" && cfg.maxHistory >= 0) {
+                            root.maxHistory = Math.floor(cfg.maxHistory);
+                            if (root.maxHistory > 0)
+                                root.lastFiniteLimit = root.maxHistory;
+                        }
+                    } catch (e) {}
+                }
+                root.reload();
+            }
+        }
+    }
+
+    Process {
         id: listProc
 
         command: ["cliphist", "list"]
         stdout: StdioCollector {
             onStreamFinished: {
                 const lines = text.split("\n").filter(l => l.trim().length > 0);
-                const parsed = [];
-                const missingSpecs = [];
+                let parsed = [];
                 const imgRe = /^\[\[ binary data (.*?) (png|jpg|jpeg|webp|bmp|gif) (.*?) \]\]$/i;
                 for (const line of lines) {
                     const tabIdx = line.indexOf("\t");
@@ -76,12 +145,11 @@ Scope {
                             size: size,
                             ext: ext,
                             dimensions: dimensions,
-                            displayText: `Imagem (${dimensions} • ${size})`,
+                            displayText: `Image (${dimensions} • ${size})`,
                             thumbPath: `${root.cacheDir}/${id}.${ext}`,
                             isUrl: false,
                             isHexColor: false
                         });
-                        missingSpecs.push(`${id}:${ext}`);
                     } else {
                         const trimmed = content.trim();
                         parsed.push({
@@ -98,7 +166,22 @@ Scope {
                         });
                     }
                 }
+                if (root.maxHistory > 0 && parsed.length > root.maxHistory) {
+                    const kept = parsed.slice(0, root.maxHistory);
+                    const overflow = parsed.slice(root.maxHistory);
+                    const overflowLines = overflow.map(e => e.rawLine).join("\n");
+                    const overflowIds = overflow.map(e => e.id);
+                    trimProc.command = [
+                        "sh", "-c",
+                        'printf "%s\n" "$1" | cliphist delete >/dev/null 2>&1; shift; dir="$HOME/.cache/caelestia-clipboard"; for id in "$@"; do rm -f "$dir/$id".*; done',
+                        "sh", overflowLines, ...overflowIds
+                    ];
+                    trimProc.running = false;
+                    trimProc.running = true;
+                    parsed = kept;
+                }
                 root.entries = parsed;
+                const missingSpecs = parsed.filter(e => e.isImage).map(e => `${e.id}:${e.ext}`);
                 if (missingSpecs.length > 0) {
                     thumbProc.command = ["sh", "-c", 'dir="$HOME/.cache/caelestia-clipboard"; mkdir -p "$dir"; for item in "$@"; do id="${item%%:*}"; ext="${item#*:}"; out="$dir/$id.$ext"; [ -s "$out" ] || cliphist decode "$id" > "$out" 2>/dev/null; done', "sh", ...missingSpecs];
                     thumbProc.running = false;
@@ -106,6 +189,10 @@ Scope {
                 }
             }
         }
+    }
+
+    Process {
+        id: trimProc
     }
 
     Process {
@@ -124,5 +211,7 @@ Scope {
         onExited: root.reload()
     }
 
-    Component.onCompleted: reload()
+    Component.onCompleted: {
+        loadProc.running = true;
+    }
 }
