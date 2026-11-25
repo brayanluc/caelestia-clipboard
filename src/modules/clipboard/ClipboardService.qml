@@ -85,12 +85,14 @@ Scope {
         if (!item)
             return;
         root.itemDeleting(item.id);
+        root.entries = root.entries.filter(e => e.id !== item.id);
         delProc.command = ["sh", "-c", 'printf "%s\n" "$1" | cliphist delete && rm -f "$HOME/.cache/caelestia-clipboard/$2".*', "sh", item.rawLine, item.id];
         delProc.running = false;
         delProc.running = true;
     }
 
     function wipeAll(): void {
+        root.entries = [];
         wipeProc.running = false;
         wipeProc.running = true;
     }
@@ -129,12 +131,20 @@ Scope {
             onStreamFinished: {
                 const lines = text.split("\n").filter(l => l.trim().length > 0);
                 let parsed = [];
+                const prevById = new Map();
+                for (const prev of root.entries)
+                    prevById.set(prev.id, prev);
                 const imgRe = /^\[\[ binary data (.*?) (png|jpg|jpeg|webp|bmp|gif) (.*?) \]\]$/i;
                 for (const line of lines) {
                     const tabIdx = line.indexOf("\t");
                     if (tabIdx === -1)
                         continue;
                     const id = line.slice(0, tabIdx);
+                    const existing = prevById.get(id);
+                    if (existing && existing.rawLine === line) {
+                        parsed.push(existing);
+                        continue;
+                    }
                     const content = line.slice(tabIdx + 1);
                     const m = content.match(imgRe);
                     if (m) {

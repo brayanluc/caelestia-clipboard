@@ -132,6 +132,10 @@ Item {
         readonly property int maxVisible: Math.min(7, Math.max(1, list.count))
         implicitHeight: list.count > 0 ? (Tokens.sizes.launcher.itemHeight + list.spacing) * maxVisible - list.spacing : 96
 
+        Behavior on implicitHeight {
+            Anim {}
+        }
+
         Behavior on anchors.bottomMargin {
             Anim {}
         }
@@ -173,6 +177,30 @@ Item {
                     else
                         list.currentIndex = 0;
                     root.pendingIndex = -1;
+                }
+            }
+
+            remove: Transition {
+                ParallelAnimation {
+                    ScriptAction {
+                        script: ViewTransition.item.z = -1
+                    }
+                    Anim {
+                        property: "opacity"
+                        to: 0
+                        type: Anim.DefaultEffects
+                    }
+                    Anim {
+                        property: "scale"
+                        to: 0.94
+                        type: Anim.DefaultEffects
+                    }
+                }
+            }
+
+            displaced: Transition {
+                Anim {
+                    properties: "x,y"
                 }
             }
 
