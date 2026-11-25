@@ -68,9 +68,15 @@ Scope {
         });
     }
 
+    property double lastCopyTime: 0
+
     function copyItem(item): void {
         if (!item)
             return;
+        const now = Date.now();
+        if (now - root.lastCopyTime < 250)
+            return;
+        root.lastCopyTime = now;
         if (root.autoPaste) {
             Quickshell.execDetached([
                 "sh", "-c",
