@@ -42,7 +42,7 @@ Item {
         Item {
             id: leading
 
-            implicitWidth: root.modelData.isImage ? parent.height * 1.15 : parent.height * 0.7
+            implicitWidth: parent.height * 1.15
             implicitHeight: parent.height * 0.8
             anchors.verticalCenter: parent.verticalCenter
 

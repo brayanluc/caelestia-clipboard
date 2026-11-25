@@ -7,6 +7,8 @@ import Quickshell.Io
 Scope {
     id: root
 
+    signal itemDeleting(string id)
+
     property var entries: []
     property int thumbRevision: 0
     property bool autoPaste: false
@@ -82,6 +84,7 @@ Scope {
     function deleteItem(item): void {
         if (!item)
             return;
+        root.itemDeleting(item.id);
         delProc.command = ["sh", "-c", 'printf "%s\n" "$1" | cliphist delete && rm -f "$HOME/.cache/caelestia-clipboard/$2".*', "sh", item.rawLine, item.id];
         delProc.running = false;
         delProc.running = true;

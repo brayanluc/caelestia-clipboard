@@ -24,6 +24,7 @@ Item {
 
     property bool limitExpanded: false
     property int draftLimit: 100
+    property int pendingIndex: -1
 
     readonly property bool isUnlimited: service.maxHistory === 0
     readonly property int activeSliderValue: sliderDrag.pressed ? draftLimit : (isUnlimited ? service.lastFiniteLimit : service.maxHistory)
@@ -41,6 +42,25 @@ Item {
 
     ClipboardService {
         id: service
+        onItemDeleting: id => {
+            const currentIdx = list.currentIndex;
+            const currentId = root.currentEntry?.id ?? "";
+            if (currentIdx < 0)
+                return;
+            if (id === currentId) {
+                root.pendingIndex = currentIdx;
+            } else {
+                const vals = listModel.values;
+                let deletedIdx = -1;
+                for (let i = 0; i < vals.length; i++) {
+                    if (vals[i].id === id) {
+                        deletedIdx = i;
+                        break;
+                    }
+                }
+                root.pendingIndex = (deletedIdx !== -1 && deletedIdx < currentIdx) ? currentIdx - 1 : currentIdx;
+            }
+        }
         onMaxHistoryChanged: {
             if (maxHistory > 0)
                 root.draftLimit = maxHistory;
@@ -143,8 +163,17 @@ Item {
             }
 
             model: ScriptModel {
+                id: listModel
                 values: service.filter(search.text)
-                onValuesChanged: list.currentIndex = 0
+                onValuesChanged: {
+                    if (values.length === 0)
+                        list.currentIndex = -1;
+                    else if (root.pendingIndex >= 0)
+                        list.currentIndex = Math.max(0, Math.min(root.pendingIndex, values.length - 1));
+                    else
+                        list.currentIndex = 0;
+                    root.pendingIndex = -1;
+                }
             }
 
             delegate: ClipboardItem {
