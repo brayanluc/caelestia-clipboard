@@ -10,6 +10,7 @@ Scope {
     signal itemDeleting(string id)
 
     property var entries: []
+    property var deleteQueue: []
     property int thumbRevision: 0
     property bool autoPaste: false
     property int maxHistory: 100
@@ -81,17 +82,26 @@ Scope {
         }
     }
 
+    function processNextDelete(): void {
+        if (delProc.running || root.deleteQueue.length === 0)
+            return;
+        const next = root.deleteQueue[0];
+        root.deleteQueue = root.deleteQueue.slice(1);
+        delProc.command = ["sh", "-c", 'printf "%s\n" "$1" | cliphist delete && rm -f "$HOME/.cache/caelestia-clipboard/$2".*', "sh", next.rawLine, next.id];
+        delProc.running = true;
+    }
+
     function deleteItem(item): void {
         if (!item)
             return;
         root.itemDeleting(item.id);
         root.entries = root.entries.filter(e => e.id !== item.id);
-        delProc.command = ["sh", "-c", 'printf "%s\n" "$1" | cliphist delete && rm -f "$HOME/.cache/caelestia-clipboard/$2".*', "sh", item.rawLine, item.id];
-        delProc.running = false;
-        delProc.running = true;
+        root.deleteQueue = [...root.deleteQueue, { rawLine: item.rawLine, id: item.id }];
+        root.processNextDelete();
     }
 
     function wipeAll(): void {
+        root.deleteQueue = [];
         root.entries = [];
         wipeProc.running = false;
         wipeProc.running = true;
@@ -196,7 +206,7 @@ Scope {
                 root.entries = parsed;
                 const missingSpecs = parsed.filter(e => e.isImage).map(e => `${e.id}:${e.ext}`);
                 if (missingSpecs.length > 0) {
-                    thumbProc.command = ["sh", "-c", 'dir="$HOME/.cache/caelestia-clipboard"; mkdir -p "$dir"; for item in "$@"; do id="${item%%:*}"; ext="${item#*:}"; out="$dir/$id.$ext"; [ -s "$out" ] || cliphist decode "$id" > "$out" 2>/dev/null; done', "sh", ...missingSpecs];
+                    thumbProc.command = ["sh", "-c", 'dir="$HOME/.cache/caelestia-clipboard"; mkdir -p "$dir"; changed=0; for item in "$@"; do id="${item%%:*}"; ext="${item#*:}"; out="$dir/$id.$ext"; [ -s "$out" ] || { cliphist decode "$id" > "$out" 2>/dev/null && changed=1; }; done; [ "$changed" -eq 1 ] || exit 2', "sh", ...missingSpecs];
                     thumbProc.running = false;
                     thumbProc.running = true;
                 }
@@ -210,12 +220,20 @@ Scope {
 
     Process {
         id: thumbProc
-        onExited: root.thumbRevision++
+        onExited: code => {
+            if (code === 0)
+                root.thumbRevision++;
+        }
     }
 
     Process {
         id: delProc
-        onExited: root.reload()
+        onExited: {
+            if (root.deleteQueue.length > 0)
+                root.processNextDelete();
+            else
+                root.reload();
+        }
     }
 
     Process {

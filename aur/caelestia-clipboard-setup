@@ -12,6 +12,7 @@ MODE="${1:-auto}"
 [ -d "$SHARE_DIR/modules/clipboard" ] || exit 0
 
 mkdir -p "$CFG_DIR/components" "$CFG_DIR/modules/drawers" "$STATE_DIR"
+find "$CFG_DIR" -xtype l -delete 2>/dev/null || true
 
 for item in "$SYS_DIR"/*; do
     base="$(basename "$item")"
@@ -209,10 +210,13 @@ else:
     stamp = state_dir / "bind-notified"
     if not stamp.exists():
         stamp.touch()
-        subprocess.run([
-            "notify-send",
-            "caelestia-clipboard installed",
-            "SUPER + V is already bound. Bind 'caelestia shell drawers toggle clipboard' or run: caelestia-clipboard-setup --replace-bind"
-        ], stderr=subprocess.DEVNULL)
+        try:
+            subprocess.run([
+                "notify-send",
+                "caelestia-clipboard installed",
+                "SUPER + V is already bound. Bind 'caelestia shell drawers toggle clipboard' or run: caelestia-clipboard-setup --replace-bind"
+            ], stderr=subprocess.DEVNULL)
+        except Exception:
+            pass
 PYEOF
 fi

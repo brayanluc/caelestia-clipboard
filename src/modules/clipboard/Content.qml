@@ -33,6 +33,7 @@ Item {
     implicitWidth: panelWidth + padding * 2
     implicitHeight: previewCard.implicitHeight + (showPreview ? padding : 0) + listArea.implicitHeight + (limitBar.implicitHeight > 0 ? limitBar.implicitHeight + Tokens.spacing.small : 0) + searchRow.height + padding * 3
 
+    Keys.forwardTo: [search]
     Keys.onEscapePressed: {
         if (root.limitExpanded)
             root.limitExpanded = false;
