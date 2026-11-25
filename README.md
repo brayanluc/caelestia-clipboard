@@ -4,7 +4,8 @@ Native QML clipboard history drawer for **Caelestia Shell** (Quickshell + Hyprla
 
 ## Preview
 
-<img width="1247" height="780" alt="caelestia-clipboard-01" src="https://github.com/user-attachments/assets/728d18b1-345e-4480-bbec-7ee9bc3428a0" /> <img width="1247" height="782" alt="caelestia-clipboard-02" src="https://github.com/user-attachments/assets/6878560d-b449-4b2a-9148-c6770d835b9a" />
+<img width="1252" height="969" alt="caelestia-clipboard-03" src="https://github.com/user-attachments/assets/99abec03-14d5-4404-a495-0cf06f08db99" /> <img width="1251" height="969" alt="caelestia-clipboard-04" src="https://github.com/user-attachments/assets/25f84cee-af04-4609-b7bb-7533a8fb4a21" /> <img width="1254" height="970" alt="caelestia-clipboard-05" src="https://github.com/user-attachments/assets/8ce006f7-2c83-477c-aa3a-b82d25cf7969" />
+
 
 ## Features
 
